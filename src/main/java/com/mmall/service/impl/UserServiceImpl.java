@@ -15,6 +15,8 @@ import java.util.Date;
 import java.util.UUID;
 
 import static java.util.Objects.isNull;
+import static java.util.Objects.nonNull;
+import static org.apache.commons.lang3.StringUtils.isBlank;
 
 /**
  * create by Stefan on 2020-01-29
@@ -27,8 +29,8 @@ public class UserServiceImpl implements IUserService {
 
     @Override
     public ServerResponse<User> login(String username, String password) {
-        int resultCount = userMapper.checkUsername(username);
-        if (resultCount == 0) {
+        int rowCount = userMapper.checkUsername(username);
+        if (rowCount == 0) {
             return ServerResponse.createByError("用户名不存在");
         }
         String md5Password = MD5Util.MD5EncodeUtf8(password);
@@ -52,8 +54,8 @@ public class UserServiceImpl implements IUserService {
         }
         user.setRole(Const.Role.CUSTOMER);
         user.setPassword(MD5Util.MD5EncodeUtf8(user.getPassword()));
-        int resultCount = userMapper.insert(user);
-        if (resultCount == 0) {
+        int rowCount = userMapper.insert(user);
+        if (rowCount == 0) {
             return ServerResponse.createByError("注册失败");
         }
         return ServerResponse.createBySuccess("注册成功");
@@ -63,13 +65,13 @@ public class UserServiceImpl implements IUserService {
     public ServerResponse<String> checkValid(String val, String type) {
         if (StringUtils.isNotBlank(type)) {
             if (Const.USERNAME.equals(type)) {
-                int resultCount = userMapper.checkUsername(val);
-                if (resultCount > 0) {
+                int rowCount = userMapper.checkUsername(val);
+                if (rowCount > 0) {
                     return ServerResponse.createByError("用户名已存在");
                 }
             } else if (Const.EMAIL.equals(type)) {
-                int resultCount = userMapper.checkEmail(val);
-                if (resultCount > 0) {
+                int rowCount = userMapper.checkEmail(val);
+                if (rowCount > 0) {
                     return ServerResponse.createByError("Email已存在");
                 }
             }
@@ -86,7 +88,7 @@ public class UserServiceImpl implements IUserService {
             return ServerResponse.createByError("用户不存在");
         }
         String question = userMapper.selectQuestionByUsername(username);
-        if (StringUtils.isBlank(question)) {
+        if (isBlank(question)) {
             return ServerResponse.createByError("找回密码的问题是空的");
         }
         return ServerResponse.createBySuccess(question);
@@ -94,8 +96,8 @@ public class UserServiceImpl implements IUserService {
 
     @Override
     public ServerResponse<String> checkAnswer(String username, String question, String answer) {
-        int resultCount = userMapper.checkAnswer(username, question, answer);
-        if (resultCount > 0) {
+        int rowCount = userMapper.checkAnswer(username, question, answer);
+        if (rowCount > 0) {
             String forgetToken = UUID.randomUUID().toString();
             TokenCache.setKey(TokenCache.TOKEN_PREFIX + username, forgetToken);
             return ServerResponse.createBySuccess(forgetToken);
@@ -105,7 +107,7 @@ public class UserServiceImpl implements IUserService {
 
     @Override
     public ServerResponse<String> forgetResetPassword(String username, String newPassword, String forgetToken) {
-        if (StringUtils.isBlank(forgetToken)) {
+        if (isBlank(forgetToken)) {
             return ServerResponse.createByError("参数错误,token需要传递");
         }
         ServerResponse<String> response = this.checkValid(username, Const.USERNAME);
@@ -113,13 +115,13 @@ public class UserServiceImpl implements IUserService {
             return ServerResponse.createByError("用户不存在");
         }
         String token = TokenCache.getKey(TokenCache.TOKEN_PREFIX + username);
-        if (StringUtils.isBlank(token)) {
+        if (isBlank(token)) {
             return ServerResponse.createByError("Token无效或者过期");
         }
         if (StringUtils.equals(token, forgetToken)) {
             String md5Password = MD5Util.MD5EncodeUtf8(newPassword);
-            int resultCount = userMapper.updatePasswordByUsername(username, md5Password);
-            if (resultCount > 0) {
+            int rowCount = userMapper.updatePasswordByUsername(username, md5Password);
+            if (rowCount > 0) {
                 return ServerResponse.createBySuccess("修改密码成功");
             }
         } else {
@@ -130,13 +132,13 @@ public class UserServiceImpl implements IUserService {
 
     @Override
     public ServerResponse<String> resetPassword(User user, String oldPassword, String newPassword) {
-        int resultCount = userMapper.checkPassword(user.getId(), MD5Util.MD5EncodeUtf8(oldPassword));
-        if (resultCount == 0) {
+        int rowCount = userMapper.checkPassword(user.getId(), MD5Util.MD5EncodeUtf8(oldPassword));
+        if (rowCount == 0) {
             return ServerResponse.createByError("旧密码错误");
         }
         user.setPassword(MD5Util.MD5EncodeUtf8(newPassword));
-        int updateCount = userMapper.updateByPrimaryKeySelective(user);
-        if (updateCount > 0) {
+        rowCount = userMapper.updateByPrimaryKeySelective(user);
+        if (rowCount > 0) {
             return ServerResponse.createBySuccess("密码更新成功");
         }
         return ServerResponse.createByError("密码更新失败");
@@ -144,8 +146,8 @@ public class UserServiceImpl implements IUserService {
 
     @Override
     public ServerResponse<User> updateInformation(User user) {
-        int resultCount = userMapper.checkEmailByUserId(user.getId(), user.getEmail());
-        if (resultCount > 0) {
+        int rowCount = userMapper.checkEmailByUserId(user.getId(), user.getEmail());
+        if (rowCount > 0) {
             return ServerResponse.createByError("Email已存在,请更换email再尝试更新");
         }
         User updateUser = new User();
@@ -155,8 +157,8 @@ public class UserServiceImpl implements IUserService {
         updateUser.setQuestion(user.getQuestion());
         updateUser.setAnswer(user.getAnswer());
         updateUser.setUpdateTime(new Date());
-        int updateCount = userMapper.updateByPrimaryKeySelective(updateUser);
-        if (updateCount > 0) {
+        rowCount = userMapper.updateByPrimaryKeySelective(updateUser);
+        if (rowCount > 0) {
             return ServerResponse.createBySuccess("更新个人信息成功", updateUser);
         }
         return ServerResponse.createByError("更新个人信息失败");
@@ -170,5 +172,13 @@ public class UserServiceImpl implements IUserService {
         }
         user.setPassword(StringUtils.EMPTY);
         return ServerResponse.createBySuccess(user);
+    }
+
+    @Override
+    public ServerResponse<String> checkAdmin(User user) {
+        if (nonNull(user) && user.getRole().intValue() == Const.Role.ADMIN) {
+            return ServerResponse.createBySuccess();
+        }
+        return ServerResponse.createByError();
     }
 }
